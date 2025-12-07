@@ -4,7 +4,8 @@ import sys
 import os
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, colorchooser
+from tkinter import ttk, colorchooser, filedialog
+import json
 
 # PlotOptiX imports for ray tracing functionality
 from plotoptix import TkOptiX
@@ -13,6 +14,13 @@ from plotoptix.materials import (
     m_shadow_catcher, make_material
 )
 from plotoptix.enums import MaterialType, Camera
+
+
+class NumpyEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return json.JSONEncoder.default(self, obj)
 
 
 class ParticleViewer:
@@ -821,6 +829,12 @@ class ParticleViewer:
 
         root.after(100, position_control_panel)
 
+        # --- Session Management ---
+        session_frame = ttk.LabelFrame(self.control_frame, text="Session", padding=10)
+        session_frame.pack(fill=tk.X, pady=(10, 10))
+        ttk.Button(session_frame, text="Save Session", command=self.save_session).pack(fill=tk.X, pady=2)
+        ttk.Button(session_frame, text="Load Session", command=self.load_session).pack(fill=tk.X, pady=2)
+
         # --- Widgets ---
         ttk.Label(self.control_frame, text="Controls", font=("Arial", 12, "bold")).pack(pady=(20, 10))
 
@@ -1400,6 +1414,122 @@ class ParticleViewer:
             self.on_box_line_thickness_change,
             self.box_line_thickness
         )
+
+    def save_session(self):
+        """Saves the current session settings to a JSON file."""
+        if not self.rt:
+            return
+
+        # Ensure the camera state is up-to-date
+        self.sync_camera_state()
+
+        state = {
+            "type_color_overrides": {int(k): v for k, v in self.type_color_overrides.items()},
+            "selected_view_preset": self.selected_view_preset,
+            "show_box": self.show_box,
+            "box_color": self.box_color,
+            "box_line_thickness": self.box_line_thickness,
+            "show_ground_plane": self.show_ground_plane,
+            "surface_z_position": self.surface_z_position,
+            "surface_color": self.surface_color,
+            "background_color": self.background_color,
+            "current_style_key": self.current_style_key,
+            "scene_light_intensity": self.scene_light_intensity,
+            "ambient_level": self.ambient_level,
+            "aperture_radius": self.aperture_radius,
+            "focal_scale": self.focal_scale,
+            "camera_projection": self.camera_projection,
+            "camera_eye": self.camera_eye,
+            "camera_target": self.camera_target,
+            "camera_up_vector": self.camera_up_vector,
+        }
+
+        filepath = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Save Session As..."
+        )
+
+        if not filepath:
+            return
+
+        try:
+            with open(filepath, 'w') as f:
+                json.dump(state, f, indent=4, cls=NumpyEncoder)
+            print(f"Session saved to {filepath}")
+        except Exception as e:
+            print(f"Error saving session: {e}")
+
+
+    def load_session(self):
+        """Loads a session state from a JSON file."""
+        filepath = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            title="Load Session"
+        )
+        if not filepath:
+            return
+
+        try:
+            with open(filepath, 'r') as f:
+                state = json.load(f)
+            self.apply_session_state(state)
+            print(f"Session loaded from {filepath}")
+        except Exception as e:
+            print(f"Error loading session: {e}")
+
+    def apply_session_state(self, state):
+        """Applies a loaded state dictionary to the application."""
+        # Convert keys in type_color_overrides back to int
+        self.type_color_overrides = {int(k): v for k, v in state.get("type_color_overrides", {}).items()}
+        self.current_style_key = state.get("current_style_key", "Soft Pastel")
+        self.apply_style(self.current_style_key) # This also applies overrides
+
+        self.selected_view_preset = state.get("selected_view_preset", "Isometric")
+        self.show_box = state.get("show_box", False)
+        self.box_color = state.get("box_color", [0.6, 0.6, 0.6])
+        self.box_line_thickness = state.get("box_line_thickness", 0.1)
+        self.show_ground_plane = state.get("show_ground_plane", False)
+        self.surface_z_position = state.get("surface_z_position", 0.0)
+        self.surface_color = state.get("surface_color", [0.92, 0.92, 0.92])
+        self.background_color = state.get("background_color", [0.98, 0.98, 0.98])
+        self.scene_light_intensity = state.get("scene_light_intensity", 1.0)
+        self.ambient_level = state.get("ambient_level", 0.85)
+        self.aperture_radius = state.get("aperture_radius", 0.0)
+        self.focal_scale = state.get("focal_scale", 0.95)
+        self.camera_projection = state.get("camera_projection", "perspective")
+        
+        # Camera position
+        self.camera_eye = np.array(state.get("camera_eye", [60, -60, 60]))
+        self.camera_target = np.array(state.get("camera_target", [0, 0, 0]))
+        self.camera_up_vector = np.array(state.get("camera_up_vector", [0, 0, 1]))
+
+        # --- Update UI and Rendering ---
+        self.box_color_hex = self._float_rgb_to_hex(self.box_color)
+        self.surface_color_hex = self._float_rgb_to_hex(self.surface_color)
+        self.background_color_hex = self._float_rgb_to_hex(self.background_color)
+
+        # Update Tkinter variables
+        if hasattr(self, "box_var"): self.box_var.set(self.show_box)
+        if hasattr(self, "box_line_thickness_var"): self.box_line_thickness_var.set(self.box_line_thickness)
+        if hasattr(self, "surface_var"): self.surface_var.set(self.surface_z_position)
+        if hasattr(self, "scene_light_var"): self.scene_light_var.set(self.scene_light_intensity)
+        if hasattr(self, "ambient_var"): self.ambient_var.set(self.ambient_level)
+        if hasattr(self, "blur_var"): self.blur_var.set(self.aperture_radius)
+        if hasattr(self, "focus_var"): self.focus_var.set(self.focal_scale)
+        if hasattr(self, "camera_projection_var"): self.camera_projection_var.set(self.projection_labels[self.camera_projection])
+        if hasattr(self, "camera_view_var"): self.camera_view_var.set(self.selected_view_preset)
+
+        # Refresh controls that depend on these values
+        self._refresh_box_controls()
+        self._refresh_surface_controls()
+        self.apply_background_color()
+
+        # Update the 3D scene
+        self.update_lights()
+        self.update_camera()
+        self.update_particles()
+        print("Session state applied.")
 
 
     def on_loop_toggle(self):
