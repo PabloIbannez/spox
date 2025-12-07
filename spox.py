@@ -1038,17 +1038,18 @@ class ParticleViewer:
         ttk.Button(self.control_frame, text="Save Screenshot", command=self.save_screenshot).pack(fill=tk.X, pady=5)
 
         # Box Options
-        box_frame = ttk.LabelFrame(self.control_frame, text="Show Box", padding=10)
+        box_frame = ttk.LabelFrame(self.control_frame, text="Box", padding=10)
         box_frame.pack(fill=tk.X, pady=(0, 10))
         self.box_var = tk.BooleanVar(value=self.show_box)
-        ttk.Checkbutton(box_frame, text="Show box", variable=self.box_var,
-                        command=self.on_box_toggle).pack(anchor=tk.W)
         box_color_row = ttk.Frame(box_frame)
         box_color_row.pack(fill=tk.X, pady=(6, 0))
         ttk.Label(box_color_row, text="Color:").pack(side=tk.LEFT)
         self.box_color_display = tk.Label(box_color_row, width=4, background=self.box_color_hex, relief="groove")
         self.box_color_display.pack(side=tk.LEFT, padx=4)
         ttk.Button(box_color_row, text="Choose...", command=self.on_box_color_pick).pack(side=tk.RIGHT)
+
+        self.box_toggle_btn = ttk.Button(box_frame, text=self._box_button_text(), command=self.on_box_toggle)
+        self.box_toggle_btn.pack(fill=tk.X, pady=(4, 0))
 
         # Surface Options
         surface_frame = ttk.LabelFrame(self.control_frame, text="Surface Position (Z)", padding=10)
@@ -1208,6 +1209,9 @@ class ParticleViewer:
     def _surface_button_text(self):
         return "Show surface" if not self.show_ground_plane else "Hide surface"
 
+    def _box_button_text(self):
+        return "Show box" if not self.show_box else "Hide box"
+
     def _refresh_surface_controls(self):
         if hasattr(self, "surface_toggle_btn"):
             self.surface_toggle_btn.config(text=self._surface_button_text())
@@ -1217,6 +1221,8 @@ class ParticleViewer:
     def _refresh_box_controls(self):
         if hasattr(self, "box_color_display") and self.box_color_hex:
             self.box_color_display.config(background=self.box_color_hex)
+        if hasattr(self, "box_toggle_btn"):
+            self.box_toggle_btn.config(text=self._box_button_text())
         if hasattr(self, "box_var"):
             self.box_var.set(self.show_box)
 
@@ -1346,7 +1352,7 @@ class ParticleViewer:
         )
 
     def on_box_toggle(self):
-        self.show_box = self.box_var.get()
+        self.show_box = not self.show_box
         if self.show_box:
             self.add_box_outline()
         else:
