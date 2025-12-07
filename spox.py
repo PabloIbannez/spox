@@ -119,13 +119,15 @@ class ParticleViewer:
         self.box_line_thickness = 0.1
         self.background_color = [0.98, 0.98, 0.98]
         
-        self.style_presets = self._build_style_presets()
-        self.current_style_key = "Soft Pastel"
+        self.materials = {}
+        self.color_palettes = {}
+        self._build_palettes_and_materials()
+        self.current_palette_key = "Soft Pastel"
         # Determine max types based on the preset palette size
-        self.max_type_count = len(next(iter(self.style_presets.values()))["palette"])
+        self.max_type_count = len(next(iter(self.color_palettes.values())))
         
         # Apply initial styles
-        self.apply_style(self.current_style_key, refresh=False)
+        self.apply_palette(self.current_palette_key, refresh=False)
         self.surface_color_hex = self._float_rgb_to_hex(self.surface_color)
         self.background_color_hex = self._float_rgb_to_hex(self.background_color)
         self.box_color_hex = self._float_rgb_to_hex(self.box_color)
@@ -136,67 +138,74 @@ class ParticleViewer:
         elif data_string:
             self.load_from_string(data_string)
 
-    def _build_style_presets(self):
+    def _build_palettes_and_materials(self):
         """
         Defines the available color palettes and material styles for the visualization.
-        Returns:
-            dict: Dictionary of style configurations.
         """
-        pastel = [
-            [0.45, 0.65, 0.85], [0.85, 0.45, 0.45], [0.45, 0.85, 0.55],
-            [0.85, 0.75, 0.45], [0.75, 0.45, 0.85], [0.45, 0.85, 0.85],
-            [0.85, 0.55, 0.45], [0.65, 0.65, 0.65],
-        ]
-        vibrant = [
-            [0.15, 0.45, 1.0], [1.0, 0.2, 0.2], [0.1, 0.8, 0.3],
-            [1.0, 0.7, 0.0], [0.8, 0.0, 0.9], [0.0, 0.85, 0.85],
-            [1.0, 0.4, 0.1], [0.9, 0.9, 0.9],
-        ]
-        vivid_detail = [
-            [0.05, 0.35, 0.95], [0.95, 0.05, 0.05], [0.0, 0.7, 0.25],
-            [0.95, 0.6, 0.0], [0.75, 0.1, 0.9], [0.0, 0.75, 0.75],
-            [0.95, 0.3, 0.0], [0.95, 0.95, 0.95],
-        ]
-        return {
-            "Soft Pastel": {
-                "palette": pastel,
-                "material": "cartoon",
-                "description": "Soft tones suited for publication graphics with a matte finish.",
-            },
-            "Vibrant": {
-                "palette": vibrant,
-                "material": "cartoon",
-                "description": "More intense colors to highlight differences between particle types.",
-            },
-            "Defined Vibrant": {
-                "palette": vivid_detail,
-                "material": "vivid_plastic",
-                "description": "Saturated colors with a plastic material to emphasize edges.",
-            },
+        self.materials = {
+            "cartoon": {"description": "Soft tones suited for publication graphics with a matte finish."},
+            "vivid_plastic": {"description": "Saturated colors with a plastic material to emphasize edges."},
+            "soft_plastic": {"description": "A softer, less reflective plastic material."},
+            "diffuse": {"description": "A simple diffuse/matt material."},
+            "flat": {"description": "A flat material with no shading."},
         }
 
-    def apply_style(self, style_key, refresh=True):
+        self.color_palettes = {
+            "Soft Pastel": [
+                [0.45, 0.65, 0.85], [0.85, 0.45, 0.45], [0.45, 0.85, 0.55],
+                [0.85, 0.75, 0.45], [0.75, 0.45, 0.85], [0.45, 0.85, 0.85],
+                [0.85, 0.55, 0.45], [0.65, 0.65, 0.65],
+            ],
+            "Vibrant": [
+                [0.15, 0.45, 1.0], [1.0, 0.2, 0.2], [0.1, 0.8, 0.3],
+                [1.0, 0.7, 0.0], [0.8, 0.0, 0.9], [0.0, 0.85, 0.85],
+                [1.0, 0.4, 0.1], [0.9, 0.9, 0.9],
+            ],
+            "Vivid Detail": [
+                [0.05, 0.35, 0.95], [0.95, 0.05, 0.05], [0.0, 0.7, 0.25],
+                [0.95, 0.6, 0.0], [0.75, 0.1, 0.9], [0.0, 0.75, 0.75],
+                [0.95, 0.3, 0.0], [0.95, 0.95, 0.95],
+            ],
+        }
+
+    def apply_palette(self, palette_key, refresh=True):
         """
-        Applies a visual style preset (colors and materials).
+        Applies a color palette.
         """
-        preset = self.style_presets.get(style_key)
-        if not preset:
+        palette = self.color_palettes.get(palette_key)
+        if not palette:
             return
-        self.type_colors = {i: list(color) for i, color in enumerate(preset["palette"])}
+        self.type_colors = {i: list(color) for i, color in enumerate(palette)}
         self._apply_type_overrides()
-        self.particle_material = preset["material"]
-        self.current_style_key = style_key
+        self.current_palette_key = palette_key
         
         # Update UI if initialized
-        if hasattr(self, "style_var"):
-            if self.style_var.get() != style_key:
-                self.style_var.set(style_key)
-        if hasattr(self, "style_desc_var"):
-            self.style_desc_var.set(preset.get("description", ""))
+        if hasattr(self, "palette_var"):
+            if self.palette_var.get() != palette_key:
+                self.palette_var.set(palette_key)
             
         self._refresh_type_color_controls()
         if refresh and self.rt:
             self.update_particles()
+    
+    def apply_material(self, material_key, refresh=True):
+        """
+        Applies a visual style preset (colors and materials).
+        """
+        if material_key not in self.materials:
+            return
+        self.particle_material = material_key
+        
+        # Update UI if initialized
+        if hasattr(self, "material_var"):
+            if self.material_var.get() != material_key:
+                self.material_var.set(material_key)
+        if hasattr(self, "material_desc_var"):
+            self.material_desc_var.set(self.materials[material_key].get("description", ""))
+            
+        if refresh and self.rt:
+            self.update_particles()
+
 
     def _apply_type_overrides(self):
         """Re-applies user-defined color overrides over the preset."""
@@ -434,6 +443,10 @@ class ParticleViewer:
         m_vivid_plastic = m_plastic.copy()
         m_vivid_plastic["VarFloat"] = {"base_roughness": 0.15}
         self.rt.setup_material("vivid_plastic", m_vivid_plastic)
+
+        # Flat and Diffuse materials
+        self.rt.setup_material("flat", m_flat)
+        self.rt.setup_material("diffuse", m_diffuse)
 
         # Shadow Catcher (Ground)
         m_ground = m_shadow_catcher.copy()
@@ -1002,27 +1015,41 @@ class ParticleViewer:
         ttk.Button(ray_frame, text="Relaunch rays", command=self.on_rerun_rays).pack(fill=tk.X, pady=(6, 0))
 
         # Visual Style Section
-        style_frame = ttk.LabelFrame(self.control_frame, text="Visual Style", padding=10)
+        style_frame = ttk.LabelFrame(self.control_frame, text="Visuals", padding=10)
         style_frame.pack(fill=tk.X, pady=(0, 10))
-        ttk.Label(style_frame, text="Style selector:").pack(anchor=tk.W)
-        self.style_var = tk.StringVar(value=self.current_style_key)
-        style_combo = ttk.Combobox(
+        style_frame.grid_columnconfigure(1, weight=1)
+
+        ttk.Label(style_frame, text="Material:").grid(row=0, column=0, sticky="w")
+        self.material_var = tk.StringVar(value=self.particle_material)
+        material_combo = ttk.Combobox(
             style_frame,
-            textvariable=self.style_var,
-            values=list(self.style_presets.keys()),
+            textvariable=self.material_var,
+            values=list(self.materials.keys()),
             state="readonly",
         )
-        style_combo.pack(fill=tk.X, pady=2)
-        style_combo.bind("<<ComboboxSelected>>", self.on_style_combo_change)
-        self.style_desc_var = tk.StringVar(value=self.style_presets[self.current_style_key].get("description", ""))
-        ttk.Label(style_frame, textvariable=self.style_desc_var, wraplength=300, font=("Arial", 8)).pack(anchor=tk.W, pady=(4, 0))
+        material_combo.grid(row=0, column=1, sticky="ew", padx=5)
+        material_combo.bind("<<ComboboxSelected>>", self.on_material_change)
         
-        bg_row = ttk.Frame(style_frame)
-        bg_row.pack(fill=tk.X, pady=(6, 0))
-        ttk.Label(bg_row, text="Background color:").pack(side=tk.LEFT)
-        self.background_color_display = tk.Label(bg_row, width=4, background=self.background_color_hex, relief="groove")
-        self.background_color_display.pack(side=tk.LEFT, padx=4)
-        ttk.Button(bg_row, text="Change", command=self.on_background_color_pick).pack(side=tk.RIGHT)
+        self.material_desc_var = tk.StringVar(value=self.materials[self.particle_material].get("description", ""))
+        desc_label = ttk.Label(style_frame, textvariable=self.material_desc_var, font=("Arial", 8))
+        desc_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4,0))
+        desc_label.bind('<Configure>', lambda e: desc_label.config(wraplength=desc_label.winfo_width()))
+
+        ttk.Label(style_frame, text="Color Palette:").grid(row=2, column=0, sticky="w", pady=(6,0))
+        self.palette_var = tk.StringVar(value=self.current_palette_key)
+        palette_combo = ttk.Combobox(
+            style_frame,
+            textvariable=self.palette_var,
+            values=list(self.color_palettes.keys()),
+            state="readonly",
+        )
+        palette_combo.grid(row=2, column=1, sticky="ew", padx=5, pady=(6,0))
+        ttk.Button(style_frame, text="Load", command=self.on_palette_change).grid(row=2, column=2, sticky="e", pady=(6,0))
+
+        ttk.Label(style_frame, text="Background color:").grid(row=3, column=0, sticky="w", pady=(6,0))
+        self.background_color_display = tk.Label(style_frame, width=4, background=self.background_color_hex, relief="groove")
+        self.background_color_display.grid(row=3, column=1, sticky="w", padx=5, pady=(6,0))
+        ttk.Button(style_frame, text="Change", command=self.on_background_color_pick).grid(row=3, column=2, sticky="e", pady=(6,0))
 
         # Colors by Type Section
         type_frame = ttk.LabelFrame(self.control_frame, text="Colors by type", padding=10)
@@ -1279,9 +1306,13 @@ class ParticleViewer:
             color = self.type_colors.get(idx, [0.5, 0.5, 0.5])
             label.config(background=self._float_rgb_to_hex(color))
 
-    def on_style_combo_change(self, event=None):
-        selected = self.style_var.get()
-        self.apply_style(selected)
+    def on_material_change(self, event=None):
+        selected_material = self.material_var.get()
+        self.apply_material(selected_material)
+
+    def on_palette_change(self, event=None):
+        selected_palette = self.palette_var.get()
+        self.apply_palette(selected_palette)
 
     def _handle_slider_entry_change(self, entry_widget, variable, min_val, max_val, callback, fallback_value):
         try:
@@ -1482,7 +1513,8 @@ class ParticleViewer:
             "surface_z_position": self.surface_z_position,
             "surface_color": self.surface_color,
             "background_color": self.background_color,
-            "current_style_key": self.current_style_key,
+            "particle_material": self.particle_material,
+            "current_palette_key": self.current_palette_key,
             "scene_light_intensity": self.scene_light_intensity,
             "ambient_level": self.ambient_level,
             "aperture_radius": self.aperture_radius,
@@ -1675,9 +1707,11 @@ class ParticleViewer:
         """Applies a loaded state dictionary to the application."""
         # Convert keys in type_color_overrides back to int
         self.type_color_overrides = {int(k): v for k, v in state.get("type_color_overrides", {}).items()}
-        self.current_style_key = state.get("current_style_key", "Soft Pastel")
-        self.apply_style(self.current_style_key) # This also applies overrides
-
+        
+        # Apply material and palette
+        self.apply_material(state.get("particle_material", "cartoon"))
+        self.apply_palette(state.get("current_palette_key", "Soft Pastel"))
+        
         self.selected_view_preset = state.get("selected_view_preset", "Isometric")
         self.show_box = state.get("show_box", False)
         self.box_color = state.get("box_color", [0.6, 0.6, 0.6])
