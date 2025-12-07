@@ -100,6 +100,7 @@ class ParticleViewer:
         self.particle_material = "cartoon"
         self.surface_color = [0.92, 0.92, 0.92]
         self.box_color = [0.6, 0.6, 0.6]
+        self.box_line_thickness = 0.1
         self.background_color = [0.98, 0.98, 0.98]
         
         self.style_presets = self._build_style_presets()
@@ -511,7 +512,7 @@ class ParticleViewer:
             [0, 4], [1, 5], [2, 6], [3, 7],   # Vertical pillars
         ], dtype=np.int32)
 
-        radii = np.full(corners.shape[0], 0.1, dtype=np.float32)
+        radii = np.full(corners.shape[0], self.box_line_thickness, dtype=np.float32)
         colors = np.full((corners.shape[0], 3), self.box_color, dtype=np.float32)
         edge_indices = edges.flatten()
 
@@ -1048,6 +1049,23 @@ class ParticleViewer:
         self.box_color_display.pack(side=tk.LEFT, padx=4)
         ttk.Button(box_color_row, text="Choose...", command=self.on_box_color_pick).pack(side=tk.RIGHT)
 
+        ttk.Label(box_frame, text="Line Thickness:").pack(anchor=tk.W, pady=(6, 0))
+        self.box_line_thickness_var = tk.DoubleVar(value=self.box_line_thickness)
+        box_thickness_slider_frame = ttk.Frame(box_frame)
+        box_thickness_slider_frame.pack(fill=tk.X, pady=2)
+        ttk.Scale(
+            box_thickness_slider_frame,
+            from_=0.01,
+            to=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.box_line_thickness_var,
+            command=self.on_box_line_thickness_change
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.box_line_thickness_entry = ttk.Entry(box_thickness_slider_frame, width=6, textvariable=self.box_line_thickness_var)
+        self.box_line_thickness_entry.pack(side=tk.RIGHT, padx=(6, 0))
+        self.box_line_thickness_entry.bind('<Return>', self.on_box_line_thickness_entry_change)
+        self.box_line_thickness_entry.bind('<FocusOut>', self.on_box_line_thickness_entry_change)
+
         self.box_toggle_btn = ttk.Button(box_frame, text=self._box_button_text(), command=self.on_box_toggle)
         self.box_toggle_btn.pack(fill=tk.X, pady=(4, 0))
 
@@ -1359,6 +1377,30 @@ class ParticleViewer:
             if self.has_geometry("bounding_box"):
                 self.rt.delete_geometry("bounding_box")
         self._refresh_box_controls()
+
+    def on_box_line_thickness_change(self, value):
+        try:
+            thickness = float(value)
+        except (TypeError, ValueError):
+            return
+        thickness = float(np.clip(thickness, 0.01, 1.0))
+        self.box_line_thickness = thickness
+        if hasattr(self, "box_line_thickness_var"):
+            current = self.box_line_thickness_var.get()
+            if abs(current - thickness) > 1e-6:
+                self.box_line_thickness_var.set(thickness)
+        self.update_particles() # Redraw with new thickness
+
+    def on_box_line_thickness_entry_change(self, event=None):
+        self._handle_slider_entry_change(
+            self.box_line_thickness_entry,
+            self.box_line_thickness_var,
+            0.01,
+            1.0,
+            self.on_box_line_thickness_change,
+            self.box_line_thickness
+        )
+
 
     def on_loop_toggle(self):
         if hasattr(self, "loop_var"):
