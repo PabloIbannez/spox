@@ -822,7 +822,7 @@ class ParticleViewer:
         root.after(100, position_control_panel)
 
         # --- Widgets ---
-        ttk.Label(self.control_frame, text="Controls", font=("Arial", 12, "bold")).pack(pady=(80, 10))
+        ttk.Label(self.control_frame, text="Controls", font=("Arial", 12, "bold")).pack(pady=(20, 10))
 
         # Camera Section
         camera_frame = ttk.LabelFrame(self.control_frame, text="Camera", padding=10)
