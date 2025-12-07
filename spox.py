@@ -306,9 +306,16 @@ class ParticleViewer:
         self._parse_lines(lines)
 
     def _parse_lines(self, lines):
-        """Parses lines of particle data into frames."""
+        """
+        Parses lines of particle data into frames and automatically scales down 
+        large systems to avoid ray tracing precision artifacts (shadow acne/rings).
+        """
         current_particles = []
         current_box = None
+        
+        # Ensure lists are clear before parsing
+        self.frames = []
+        self.box_sizes = []
 
         for line in lines:
             line = line.strip()
@@ -340,6 +347,33 @@ class ParticleViewer:
         if current_particles and current_box:
             self.frames.append(np.array(current_particles))
             self.box_sizes.append(current_box)
+
+        # --- Auto-scaling Logic ---
+        if self.box_sizes:
+            # Determine the maximum dimension from the first frame's box
+            box0 = self.box_sizes[0]
+            max_dim = max(box0['Lx'], box0['Ly'], box0['Lz'])
+            
+            # Threshold: if the system is larger than 100.0 units, we scale it down.
+            # Large coordinates (>1000) cause float precision errors in ray tracing.
+            target_max = 100.0
+            
+            if max_dim > target_max:
+                scale_factor = target_max / max_dim
+                print(f"Large system detected (Max Dim: {max_dim:.2f}). Scaling by {scale_factor:.6f} to avoid rendering artifacts...")
+                
+                # Apply scaling to all frames (positions and radii)
+                for i in range(len(self.frames)):
+                    # Columns 0,1,2 are x,y,z; Column 3 is radius
+                    self.frames[i][:, 0:4] *= scale_factor
+                
+                # Apply scaling to box dimensions
+                for i in range(len(self.box_sizes)):
+                    self.box_sizes[i]['Lx'] *= scale_factor
+                    self.box_sizes[i]['Ly'] *= scale_factor
+                    self.box_sizes[i]['Lz'] *= scale_factor
+            else:
+                print(f"System size is within safe render limits (Max Dim: {max_dim:.2f}). No scaling applied.")
 
         print(f"Loaded {len(self.frames)} frames")
         for i, frame in enumerate(self.frames):
@@ -404,11 +438,11 @@ class ParticleViewer:
 
         # Attempt to set light shading (Hard vs Soft shadows)
         try:
-            self.rt.set_param(light_shading="Hard")
+            self.rt.set_param(light_shading="Soft")
         except:
             # Fallback for API variation
             try:
-                self.rt.set_light_shading("Hard")
+                self.rt.set_light_shading("Soft")
             except:
                 pass
 
@@ -432,7 +466,7 @@ class ParticleViewer:
         self.rt.set_ambient(ambient_intensity)
 
         # Accumulation (quality) settings
-        self.rt.set_param(min_accumulation_step=4)
+        self.rt.set_param(min_accumulation_step=8)
         self._apply_accumulation_setting()
 
         # Post-processing
