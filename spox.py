@@ -54,6 +54,7 @@ class ParticleViewer:
         self.sessions_directory = os.path.join(os.path.expanduser("~"), ".spox", "sessions")
         self.config_path = os.path.join(os.path.expanduser("~"), ".spox", "config.json")
         self.autosave_path = os.path.join(os.path.expanduser("~"), ".spox", "last_session.json")
+        self.override_user_colors_on_palette_load = True
         self._load_config()
         
         # --- Rendering Parameters ---
@@ -176,7 +177,8 @@ class ParticleViewer:
         if not palette:
             return
         self.type_colors = {i: list(color) for i, color in enumerate(palette)}
-        self._apply_type_overrides()
+        if not self.override_user_colors_on_palette_load: # Logic inverted
+            self._apply_type_overrides()
         self.current_palette_key = palette_key
         
         # Update UI if initialized
@@ -1017,7 +1019,9 @@ class ParticleViewer:
         # Visual Style Section
         style_frame = ttk.LabelFrame(self.control_frame, text="Visuals", padding=10)
         style_frame.pack(fill=tk.X, pady=(0, 10))
-        style_frame.grid_columnconfigure(1, weight=1)
+        style_frame.grid_columnconfigure(0, weight=0) # Labels
+        style_frame.grid_columnconfigure(1, weight=1) # Comboboxes/Display
+        style_frame.grid_columnconfigure(2, weight=0) # Buttons
 
         ttk.Label(style_frame, text="Material:").grid(row=0, column=0, sticky="w")
         self.material_var = tk.StringVar(value=self.particle_material)
@@ -1032,8 +1036,8 @@ class ParticleViewer:
         
         self.material_desc_var = tk.StringVar(value=self.materials[self.particle_material].get("description", ""))
         desc_label = ttk.Label(style_frame, textvariable=self.material_desc_var, font=("Arial", 8))
-        desc_label.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(4,0))
-        desc_label.bind('<Configure>', lambda e: desc_label.config(wraplength=desc_label.winfo_width()))
+        desc_label.grid(row=1, column=0, columnspan=3, sticky="ew", pady=(4,0))
+        desc_label.bind('<Configure>', lambda e: desc_label.config(wraplength=e.width)) # Bind to label's own width
 
         ttk.Label(style_frame, text="Color Palette:").grid(row=2, column=0, sticky="w", pady=(6,0))
         self.palette_var = tk.StringVar(value=self.current_palette_key)
@@ -1046,11 +1050,14 @@ class ParticleViewer:
         palette_combo.grid(row=2, column=1, sticky="ew", padx=5, pady=(6,0))
         ttk.Button(style_frame, text="Load", command=self.on_palette_change).grid(row=2, column=2, sticky="e", pady=(6,0))
 
-        ttk.Label(style_frame, text="Background color:").grid(row=3, column=0, sticky="w", pady=(6,0))
-        self.background_color_display = tk.Label(style_frame, width=4, background=self.background_color_hex, relief="groove")
-        self.background_color_display.grid(row=3, column=1, sticky="w", padx=5, pady=(6,0))
-        ttk.Button(style_frame, text="Change", command=self.on_background_color_pick).grid(row=3, column=2, sticky="e", pady=(6,0))
+        self.override_user_colors_var = tk.BooleanVar(value=self.override_user_colors_on_palette_load)
+        ttk.Checkbutton(style_frame, text="Override user colors", variable=self.override_user_colors_var,
+                        command=self.on_toggle_override_user_colors).grid(row=3, column=0, columnspan=3, sticky="w", pady=(4,0))
 
+        ttk.Label(style_frame, text="Background color:").grid(row=4, column=0, sticky="w", pady=(6,0))
+        self.background_color_display = tk.Label(style_frame, width=4, background=self.background_color_hex, relief="groove")
+        self.background_color_display.grid(row=4, column=1, sticky="w", padx=5, pady=(6,0))
+        ttk.Button(style_frame, text="Change", command=self.on_background_color_pick).grid(row=4, column=2, sticky="e", pady=(6,0))
         # Colors by Type Section
         type_frame = ttk.LabelFrame(self.control_frame, text="Colors by type", padding=10)
         type_frame.pack(fill=tk.X, pady=(0, 10))
@@ -1465,6 +1472,11 @@ class ParticleViewer:
             self.auto_load_last_session = self.auto_load_var.get()
             self._save_config()
 
+    def on_toggle_override_user_colors(self):
+        if hasattr(self, "override_user_colors_var"):
+            self.override_user_colors_on_palette_load = self.override_user_colors_var.get()
+            self._save_config()
+
     def _load_config(self):
         """Loads application configuration from the config file."""
         if not os.path.exists(self.config_path):
@@ -1474,6 +1486,7 @@ class ParticleViewer:
                 config = json.load(f)
             self.auto_load_last_session = config.get("auto_load_last_session", True)
             self.sessions_directory = config.get("sessions_directory", os.path.join(os.path.expanduser("~"), ".spox", "sessions"))
+            self.override_user_colors_on_palette_load = config.get("override_user_colors_on_palette_load", True)
             print("Configuration loaded.")
         except Exception as e:
             print(f"Error loading configuration: {e}")
@@ -1483,6 +1496,7 @@ class ParticleViewer:
         config = {
             "auto_load_last_session": self.auto_load_last_session,
             "sessions_directory": self.sessions_directory,
+            "override_user_colors_on_palette_load": self.override_user_colors_on_palette_load,
         }
         try:
             os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
