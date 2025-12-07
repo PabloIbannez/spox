@@ -734,10 +734,27 @@ class ParticleViewer:
         root.bind('<F12>', lambda e: self.save_screenshot())
 
         def on_mouse_wheel(event):
-            if event.delta > 0:
-                self.zoom_camera(zoom_in=True)
+            # Determine if the widget that triggered the event is part of the control panel
+            is_over_panel = False
+            w = event.widget
+            while w:
+                if w == self.control_container:
+                    is_over_panel = True
+                    break
+                w = w.master
+
+            if is_over_panel:
+                # Handle vertical scrolling for the panel
+                if event.num == 5 or event.delta < 0:
+                    self.control_panel_canvas.yview_scroll(1, "units")
+                elif event.num == 4 or event.delta > 0:
+                    self.control_panel_canvas.yview_scroll(-1, "units")
             else:
-                self.zoom_camera(zoom_in=False)
+                # Handle camera zoom
+                if event.num == 4 or event.delta > 0:
+                    self.zoom_camera(zoom_in=True)
+                elif event.num == 5 or event.delta < 0:
+                    self.zoom_camera(zoom_in=False)
 
         def on_mouse_motion(event):
             if self.mouse_look_active:
@@ -766,13 +783,9 @@ class ParticleViewer:
         root.bind('<B1-Motion>', on_mouse_drag)
         root.bind('<B3-Motion>', on_mouse_drag)
 
-        # Linux/X11 scroll bindings
-        def wheel_up(e):
-            self.zoom_camera(zoom_in=True)
-        def wheel_down(e):
-            self.zoom_camera(zoom_in=False)
-        root.bind('<Button-4>', wheel_up)
-        root.bind('<Button-5>', wheel_down)
+        # Unified scroll bindings for Linux/X11
+        root.bind('<Button-4>', on_mouse_wheel)
+        root.bind('<Button-5>', on_mouse_wheel)
 
     def create_control_panel(self):
         """Constructs the Tkinter control panel."""
@@ -795,14 +808,10 @@ class ParticleViewer:
             self.control_panel_canvas.configure(scrollregion=self.control_panel_canvas.bbox("all"))
         self.control_frame.bind("<Configure>", on_control_configure)
 
-        def on_mousewheel(event):
-            self.control_panel_canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
-        self.control_panel_canvas.bind_all("<MouseWheel>", on_mousewheel)
-
         def position_control_panel():
             try:
                 root.update_idletasks()
-                self.control_container.place(relx=1.0, rely=0.5, anchor="e", relheight=0.9, width=240)
+                self.control_container.place(relx=1.0, rely=0.5, anchor="e", relheight=0.9, width=340)
             except Exception:
                 self.control_container.grid(row=0, column=1, sticky="nse", padx=0, pady=0)
                 root.grid_columnconfigure(0, weight=1)
@@ -977,7 +986,7 @@ class ParticleViewer:
         style_combo.pack(fill=tk.X, pady=2)
         style_combo.bind("<<ComboboxSelected>>", self.on_style_combo_change)
         self.style_desc_var = tk.StringVar(value=self.style_presets[self.current_style_key].get("description", ""))
-        ttk.Label(style_frame, textvariable=self.style_desc_var, wraplength=180, font=("Arial", 8)).pack(anchor=tk.W, pady=(4, 0))
+        ttk.Label(style_frame, textvariable=self.style_desc_var, wraplength=300, font=("Arial", 8)).pack(anchor=tk.W, pady=(4, 0))
         
         bg_row = ttk.Frame(style_frame)
         bg_row.pack(fill=tk.X, pady=(6, 0))
