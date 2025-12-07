@@ -4,8 +4,9 @@ import sys
 import os
 from datetime import datetime
 import tkinter as tk
-from tkinter import ttk, colorchooser, filedialog
+from tkinter import ttk, colorchooser, filedialog, simpledialog
 import json
+import shutil
 
 # PlotOptiX imports for ray tracing functionality
 from plotoptix import TkOptiX
@@ -47,6 +48,13 @@ class ParticleViewer:
         self.screenshot_counter = 0
         self.playback_active = False
         self.playback_after_id = None
+        
+        # --- Session State ---
+        self.auto_load_last_session = True
+        self.sessions_directory = os.path.join(os.path.expanduser("~"), ".spox", "sessions")
+        self.config_path = os.path.join(os.path.expanduser("~"), ".spox", "config.json")
+        self.autosave_path = os.path.join(os.path.expanduser("~"), ".spox", "last_session.json")
+        self._load_config()
         
         # --- Rendering Parameters ---
         self.ambient_level = 0.85
@@ -832,8 +840,14 @@ class ParticleViewer:
         # --- Session Management ---
         session_frame = ttk.LabelFrame(self.control_frame, text="Session", padding=10)
         session_frame.pack(fill=tk.X, pady=(10, 10))
-        ttk.Button(session_frame, text="Save Session", command=self.save_session).pack(fill=tk.X, pady=2)
-        ttk.Button(session_frame, text="Load Session", command=self.load_session).pack(fill=tk.X, pady=2)
+        ttk.Button(session_frame, text="Session Manager", command=self.open_session_manager).pack(fill=tk.X, pady=2)
+
+        self.auto_load_var = tk.BooleanVar(value=self.auto_load_last_session)
+        ttk.Checkbutton(session_frame, text="Auto-load last session", variable=self.auto_load_var,
+                        command=self.on_toggle_auto_load).pack(anchor=tk.W, pady=(4,0))
+        
+        ttk.Label(session_frame, text=f"Sessions saved in: {self.sessions_directory}", wraplength=300).pack(anchor=tk.W, pady=(4,0))
+
 
         # --- Widgets ---
         ttk.Label(self.control_frame, text="Controls", font=("Arial", 12, "bold")).pack(pady=(20, 10))
@@ -1415,9 +1429,44 @@ class ParticleViewer:
             self.box_line_thickness
         )
 
+    def on_toggle_auto_load(self):
+        if hasattr(self, "auto_load_var"):
+            self.auto_load_last_session = self.auto_load_var.get()
+            self._save_config()
+
+    def _load_config(self):
+        """Loads application configuration from the config file."""
+        if not os.path.exists(self.config_path):
+            return
+        try:
+            with open(self.config_path, 'r') as f:
+                config = json.load(f)
+            self.auto_load_last_session = config.get("auto_load_last_session", True)
+            self.sessions_directory = config.get("sessions_directory", os.path.join(os.path.expanduser("~"), ".spox", "sessions"))
+            print("Configuration loaded.")
+        except Exception as e:
+            print(f"Error loading configuration: {e}")
+
+    def _save_config(self):
+        """Saves application configuration to the config file."""
+        config = {
+            "auto_load_last_session": self.auto_load_last_session,
+            "sessions_directory": self.sessions_directory,
+        }
+        try:
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+            with open(self.config_path, 'w') as f:
+                json.dump(config, f, indent=4)
+            print("Configuration saved.")
+        except Exception as e:
+            print(f"Error saving configuration: {e}")
     def save_session(self):
         """Saves the current session settings to a JSON file."""
         if not self.rt:
+            return
+
+        session_name = simpledialog.askstring("Save Session", "Enter session name:")
+        if not session_name:
             return
 
         # Ensure the camera state is up-to-date
@@ -1444,39 +1493,183 @@ class ParticleViewer:
             "camera_up_vector": self.camera_up_vector,
         }
 
-        filepath = filedialog.asksaveasfilename(
-            defaultextension=".json",
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="Save Session As..."
-        )
+        # Sanitize the session name to be a valid filename
+        sanitized_name = re.sub(r'[^\w\d-]', '_', session_name)
+        filepath = os.path.join(self.sessions_directory, f"{sanitized_name}.json")
 
-        if not filepath:
-            return
+        if os.path.exists(filepath):
+            if not tk.messagebox.askyesno("Overwrite Session", f"A session named '{session_name}' already exists. Overwrite?"):
+                return
 
         try:
-            with open(filepath, 'w') as f:
-                json.dump(state, f, indent=4, cls=NumpyEncoder)
+            self._save_to_path(state, filepath)
             print(f"Session saved to {filepath}")
+            
+            # Also save to the auto-save path
+            self._save_to_path(state, self.autosave_path)
+
         except Exception as e:
             print(f"Error saving session: {e}")
-
+    
+    def _save_to_path(self, state, path):
+        """Helper to save state to a specific path, creating dirs if needed."""
+        try:
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, 'w') as f:
+                json.dump(state, f, indent=4, cls=NumpyEncoder)
+            print(f"Auto-saved session to {path}")
+        except Exception as e:
+            print(f"Error auto-saving session: {e}")
 
     def load_session(self):
         """Loads a session state from a JSON file."""
-        filepath = filedialog.askopenfilename(
-            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
-            title="Load Session"
-        )
-        if not filepath:
-            return
+        self.open_session_manager()
 
+    def _save_config(self):
+        """Saves application configuration to the config file."""
+        config = {
+            "auto_load_last_session": self.auto_load_last_session,
+            "sessions_directory": self.sessions_directory,
+        }
         try:
-            with open(filepath, 'r') as f:
-                state = json.load(f)
-            self.apply_session_state(state)
-            print(f"Session loaded from {filepath}")
+            os.makedirs(os.path.dirname(self.config_path), exist_ok=True)
+            with open(self.config_path, 'w') as f:
+                json.dump(config, f, indent=4)
+            print("Configuration saved.")
         except Exception as e:
-            print(f"Error loading session: {e}")
+            print(f"Error saving configuration: {e}")
+
+    def open_session_manager(self):
+        """Opens a window to manage saved sessions."""
+        manager_window = tk.Toplevel(self.rt._root)
+        manager_window.title("Session Manager")
+        manager_window.geometry("400x350")
+
+        # Session List
+        list_frame = ttk.Frame(manager_window, padding=10)
+        list_frame.pack(fill=tk.BOTH, expand=True)
+        
+        sessions_listbox = tk.Listbox(list_frame)
+        sessions_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        
+        scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=sessions_listbox.yview)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        sessions_listbox.config(yscrollcommand=scrollbar.set)
+
+        def populate_sessions():
+            sessions_listbox.delete(0, tk.END)
+            try:
+                os.makedirs(self.sessions_directory, exist_ok=True)
+                sessions = [f for f in os.listdir(self.sessions_directory) if f.endswith('.json')]
+                for session in sorted(sessions):
+                    sessions_listbox.insert(tk.END, session.replace('.json', ''))
+            except Exception as e:
+                print(f"Error reading sessions directory: {e}")
+
+        populate_sessions()
+
+        # Action Buttons
+        button_frame = ttk.Frame(manager_window, padding=10)
+        button_frame.pack(fill=tk.X)
+
+        def on_load():
+            selected_indices = sessions_listbox.curselection()
+            if not selected_indices:
+                return
+            
+            session_name = sessions_listbox.get(selected_indices[0])
+            filepath = os.path.join(self.sessions_directory, f"{session_name}.json")
+
+            try:
+                with open(filepath, 'r') as f:
+                    state = json.load(f)
+                self.apply_session_state(state)
+                print(f"Session '{session_name}' loaded.")
+                # Also save to the auto-save path
+                self._save_to_path(state, self.autosave_path)
+                manager_window.destroy()
+            except Exception as e:
+                print(f"Error loading session: {e}")
+
+        def on_delete():
+            selected_indices = sessions_listbox.curselection()
+            if not selected_indices:
+                return
+
+            session_name = sessions_listbox.get(selected_indices[0])
+            if tk.messagebox.askyesno("Delete Session", f"Are you sure you want to delete '{session_name}'?"):
+                filepath = os.path.join(self.sessions_directory, f"{session_name}.json")
+                try:
+                    os.remove(filepath)
+                    print(f"Deleted session: {session_name}")
+                    populate_sessions()
+                except Exception as e:
+                    print(f"Error deleting session: {e}")
+
+        def on_save_as():
+            selected_indices = sessions_listbox.curselection()
+            if not selected_indices:
+                return
+            
+            session_name = sessions_listbox.get(selected_indices[0])
+            filepath = os.path.join(self.sessions_directory, f"{session_name}.json")
+
+            dest_path = filedialog.asksaveasfilename(
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                title="Save Session As...",
+                initialfile=session_name
+            )
+            if not dest_path:
+                return
+            
+            if os.path.exists(dest_path):
+                if not tk.messagebox.askyesno("Overwrite File", f"The file '{os.path.basename(dest_path)}' already exists. Overwrite?"):
+                    return
+
+            try:
+                shutil.copy(filepath, dest_path)
+                print(f"Session '{session_name}' saved to {dest_path}")
+            except Exception as e:
+                print(f"Error saving session to new location: {e}")
+
+        def on_add():
+            source_path = filedialog.askopenfilename(
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+                title="Add Session File"
+            )
+            if not source_path:
+                return
+            
+            try:
+                dest_path = os.path.join(self.sessions_directory, os.path.basename(source_path))
+                if os.path.exists(dest_path):
+                    if not tk.messagebox.askyesno("Overwrite Session", f"A session named '{os.path.basename(dest_path)}' already exists. Overwrite?"):
+                        return
+                shutil.copy(source_path, dest_path)
+                print(f"Added session from {source_path}")
+                populate_sessions()
+            except Exception as e:
+                print(f"Error adding session file: {e}")
+
+        def on_save_current():
+            self.save_session()
+            populate_sessions()
+
+        top_button_frame = ttk.Frame(button_frame)
+        top_button_frame.pack(fill=tk.X, pady=2)
+        ttk.Button(top_button_frame, text="Load Selected", command=on_load).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_button_frame, text="Save Current", command=on_save_current).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_button_frame, text="Delete", command=on_delete).pack(side=tk.LEFT, padx=5)
+        ttk.Button(top_button_frame, text="Refresh", command=populate_sessions).pack(side=tk.LEFT, padx=5)
+        
+        bottom_button_frame = ttk.Frame(button_frame)
+        bottom_button_frame.pack(fill=tk.X, pady=2)
+        ttk.Button(bottom_button_frame, text="Save As...", command=on_save_as).pack(side=tk.LEFT, padx=5)
+        ttk.Button(bottom_button_frame, text="Add...", command=on_add).pack(side=tk.LEFT, padx=5)
+        
+        ttk.Button(bottom_button_frame, text="Cancel", command=manager_window.destroy).pack(side=tk.RIGHT, padx=5)
+
 
     def apply_session_state(self, state):
         """Applies a loaded state dictionary to the application."""
@@ -1921,6 +2114,16 @@ class ParticleViewer:
 
         self.setup_key_bindings()
         self.create_control_panel()
+
+        # Auto-load last session if enabled
+        if self.auto_load_last_session and os.path.exists(self.autosave_path):
+            print(f"Auto-loading session from {self.autosave_path}")
+            try:
+                with open(self.autosave_path, 'r') as f:
+                    state = json.load(f)
+                self.apply_session_state(state)
+            except Exception as e:
+                print(f"Could not auto-load session: {e}")
 
         print("\n" + "="*50)
         print("PARTICLE VIEWER CONTROLS")
