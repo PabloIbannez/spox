@@ -1,0 +1,9 @@
+{
+  "name": "glass",
+  "description": "Default glassy material used by the viewer.",
+  "params": {
+    "color": "#ffffff",
+    "ior": 1.52,
+    "roughness": 0.0
+  }
+}

@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=65", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "spox"
+version = "0.1.0"
+description = "Particle viewer refactor scaffold"
+authors = [{ name = "SPOX Maintainers" }]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+    "plotoptix",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
