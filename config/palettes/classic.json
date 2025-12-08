@@ -1,0 +1,5 @@
+{
+  "name": "classic",
+  "description": "Legacy SPOX palette mirrored from hardcoded values.",
+  "colors": ["#377eb8", "#4daf4a", "#984ea3", "#ff7f00", "#e41a1c"]
+}
